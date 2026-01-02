@@ -1,4 +1,5 @@
 import { addAddress as addAddressToAuth, deleteAddress as deleteAddressFromAuth, setDefaultAddress as setDefaultAddressInAuth, fetchUserProfile, type Address, type User } from "./auth-service"
+import { parseAddressToBackend } from "@/lib/api-utils"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8018'
 
@@ -18,13 +19,14 @@ export const updateAddress = async (addressId: string, addressData: Partial<Addr
     body.name = addressData.name
   }
   
-  if (addressData.address) {
+  if (addressData.address && addressData.cityZip) {
+    const parsed = parseAddressToBackend(addressData.address, addressData.cityZip)
+    Object.assign(body, parsed)
+  } else if (addressData.address) {
     const addressParts = addressData.address.split(',').map(s => s.trim())
     body.line1 = addressParts[0] || ''
     body.line2 = addressParts[1] || ''
-  }
-  
-  if (addressData.cityZip) {
+  } else if (addressData.cityZip) {
     const cityZipParts = addressData.cityZip.split(',').map(s => s.trim())
     body.city = cityZipParts[0] || ''
     body.state = cityZipParts[1] || ''

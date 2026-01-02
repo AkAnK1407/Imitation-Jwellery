@@ -42,18 +42,25 @@ interface BackendAddress {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8018'
 
+import { formatAddressFromBackend, parseAddressToBackend } from "@/lib/api-utils"
+
 /**
  * Transform backend address to frontend format
  */
 const transformAddress = (backendAddr: BackendAddress): Address => {
-  const addressLine = [backendAddr.line1, backendAddr.line2].filter(Boolean).join(', ')
-  const cityZip = [backendAddr.city, backendAddr.state, backendAddr.pincode].filter(Boolean).join(', ')
+  const { address, cityZip } = formatAddressFromBackend(
+    backendAddr.line1,
+    backendAddr.line2,
+    backendAddr.city,
+    backendAddr.state,
+    backendAddr.pincode
+  )
   
   return {
     id: backendAddr._id,
     name: backendAddr.name,
-    address: addressLine,
-    cityZip: cityZip,
+    address,
+    cityZip,
     isDefault: backendAddr.isDefault || false,
   }
 }
@@ -162,8 +169,7 @@ export const addAddress = async (address: Omit<Address, 'id'>): Promise<User> =>
   const url = `${API_BASE_URL}/api/v1/customers/${currentUser.id}/addresses`
 
   // Parse address and cityZip back to backend format
-  const addressParts = address.address.split(',').map(s => s.trim())
-  const cityZipParts = address.cityZip.split(',').map(s => s.trim())
+  const parsed = parseAddressToBackend(address.address, address.cityZip)
 
   const response = await fetch(url, {
     method: 'POST',
@@ -172,11 +178,7 @@ export const addAddress = async (address: Omit<Address, 'id'>): Promise<User> =>
     },
     body: JSON.stringify({
       name: address.name,
-      line1: addressParts[0] || '',
-      line2: addressParts[1] || '',
-      city: cityZipParts[0] || '',
-      state: cityZipParts[1] || '',
-      pincode: cityZipParts[2] || cityZipParts[cityZipParts.length - 1] || '',
+      ...parsed,
       isDefault: address.isDefault,
     }),
   })

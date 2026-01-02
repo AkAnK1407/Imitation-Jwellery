@@ -31,12 +31,7 @@ interface BackendWishlist {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8018'
 
-/**
- * Format price in Indian Rupees format
- */
-const formatPrice = (price: number): string => {
-  return `Rs. ${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
+import { formatPrice } from "@/lib/api-utils"
 
 /**
  * Transform backend wishlist item to frontend format

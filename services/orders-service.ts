@@ -18,6 +18,8 @@ interface BackendOrder {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8018'
 
+import { formatPriceShort } from "@/lib/api-utils"
+
 /**
  * Format date to readable string
  */
@@ -27,13 +29,6 @@ const formatDate = (dateString: string): string => {
   const month = date.toLocaleString('en-US', { month: 'short' })
   const year = date.getFullYear()
   return `${day} ${month} ${year}`
-}
-
-/**
- * Format price in Indian Rupees
- */
-const formatPrice = (amount: number): string => {
-  return `₹${amount.toLocaleString('en-IN')}`
 }
 
 /**
@@ -58,7 +53,7 @@ const transformOrder = (backendOrder: BackendOrder): Order => {
   return {
     id: backendOrder.orderNumber || backendOrder._id,
     date: formatDate(backendOrder.createdAt),
-    total: formatPrice(backendOrder.totalAmount),
+    total: formatPriceShort(backendOrder.totalAmount),
     status: mapStatus(backendOrder.status),
     items: Array.isArray(backendOrder.items) ? backendOrder.items.length : (typeof backendOrder.items === 'number' ? backendOrder.items : 0),
   }
