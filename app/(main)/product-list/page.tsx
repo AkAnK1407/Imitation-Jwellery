@@ -38,8 +38,9 @@ export default function ProductList() {
     page: 1,
   })
 
-  const products = data?.data || []
-  const totalProducts = data?.meta.totalItems || 0
+  // Ensure products is always an array with defensive check
+  const products = Array.isArray(data?.data) ? data.data : []
+  const totalProducts = data?.meta?.totalItems || 0
 
   const handleClearAll = () => {
     setPrice([0, MAX_PRODUCT_PRICE])
