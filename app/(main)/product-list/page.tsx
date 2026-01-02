@@ -31,7 +31,7 @@ export default function ProductList() {
   const [price, setPrice] = useState<[number, number]>([0, MAX_PRODUCT_PRICE])
   const [openMobileFilter, setOpenMobileFilter] = useState(false)
 
-  const { data, isLoading } = useProducts({
+  const { data, isLoading, isError, error } = useProducts({
     sort: selected.value,
     minPrice: price[0],
     maxPrice: price[1],
@@ -137,10 +137,19 @@ export default function ProductList() {
           <div className="productGrid">
             {isLoading ? (
               <div className="col-span-full py-10 text-center text-foreground/60">Loading products...</div>
+            ) : isError ? (
+              <div className="col-span-full py-10 text-center text-red-500">
+                Error loading products: {error?.message || 'Something went wrong'}
+              </div>
+            ) : products.length === 0 ? (
+              <div className="col-span-full py-10 text-center text-foreground/60">
+                No products found
+              </div>
             ) : (
               products.map((product) => (
                 <CommonProductCard
                   key={product.id}
+                  productId={Number(product.id)}
                   title={product.title}
                   price={product.price}
                   oldPrice={product.oldPrice}
