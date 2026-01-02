@@ -30,6 +30,12 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
 
   // Sync form data when modal opens
   useEffect(() => {
+    // Clear any existing timeout to prevent race conditions
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    
     if (open && userProfile && shouldSyncRef.current) {
       // Schedule the update for next render cycle to avoid cascading
       timeoutRef.current = setTimeout(() => {
@@ -43,6 +49,7 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
           lastName,
           email: userProfile.email || "",
         })
+        timeoutRef.current = null
       }, 0)
       shouldSyncRef.current = false
     }
@@ -52,7 +59,7 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
       shouldSyncRef.current = true
     }
     
-    // Cleanup function runs on every effect cleanup
+    // Cleanup only on unmount or when dependencies change
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
