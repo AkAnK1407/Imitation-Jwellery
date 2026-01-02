@@ -45,17 +45,19 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
         })
       }, 0)
       shouldSyncRef.current = false
-      
-      return () => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-        }
-      }
     }
     
     // Reset sync flag when modal closes
     if (!open) {
       shouldSyncRef.current = true
+    }
+    
+    // Cleanup function runs on every effect cleanup
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
     }
   }, [open, userProfile])
 
