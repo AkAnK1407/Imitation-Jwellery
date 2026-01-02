@@ -8,7 +8,6 @@ import RangeSlider from "@/app/components/RangeSlider"
 import CommonSelect from "@/app/components/select/CommonSelect"
 import { Checkbox, Dialog, DialogPanel, Popover, PopoverButton, PopoverPanel } from "@headlessui/react"
 import { Check, CheckIcon, ChevronDown, Filter } from "lucide-react"
-import Link from "next/link"
 import { useState } from "react"
 import { useProducts } from "@/hooks/use-products"
 
