@@ -1,49 +1,35 @@
+export interface Address {
+  _id: string;
+  customerId: string;
+  label: string;
+  fullName: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country?: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface User {
+  _id: string;
+  fullName: string;
+  email?: string;
+  mobile: string;
+}
+
 export interface LoginCredentials {
   mobile: string;
   otp: string;
 }
 
-export interface Address {
-  id: string;
-  name: string;
-  address: string;
-  cityZip: string;
-  isDefault: boolean;
-}
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018/api/v1";
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  addresses: Address[];
-}
-
-interface BackendCustomer {
-  _id: string;
-  name: string;
-  email: string;
-  phone: string;
-  mobile?: string;
-}
-
-interface BackendAddress {
-  _id: string;
-  name: string;
-  fullName?: string; // added fullName
-  line1: string;
-  line2?: string;
-  city: string;
-  state?: string;
-  pincode: string;
-  isDefault: boolean;
-}
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8018";
-
-import { formatAddressFromBackend } from "@/lib/api-utils";
-
-// Device id for consistency across services
+// Utility: get device ID for request header consistency
 const getDeviceId = (): string => {
   if (typeof window === "undefined") return "";
   let deviceId = localStorage.getItem("deviceId");
@@ -56,100 +42,67 @@ const getDeviceId = (): string => {
   return deviceId;
 };
 
-const transformAddress = (backendAddr: BackendAddress): Address => {
-  const { address, cityZip } = formatAddressFromBackend(
-    backendAddr.line1,
-    backendAddr.line2,
-    backendAddr.city,
-    backendAddr.state,
-    backendAddr.pincode
-  );
-  return {
-    id: backendAddr._id,
-    name: backendAddr.name || backendAddr.fullName || "", // use name or fullName
-    address,
-    cityZip,
-    isDefault: backendAddr.isDefault || false,
-  };
-};
-
-const transformCustomer = (
-  backendCustomer: BackendCustomer,
-  addresses: BackendAddress[] = []
-): User => {
-  return {
-    id: backendCustomer._id,
-    name: backendCustomer.name || "",
-    email: backendCustomer.email || "",
-    phone: backendCustomer.phone || backendCustomer.mobile || "",
-    addresses: Array.isArray(addresses) ? addresses.map(transformAddress) : [],
-  };
-};
-
-const guestUser: User = {
-  id: "guest",
-  name: "",
-  email: "",
-  phone: "",
-  addresses: [],
-};
-
-// Never throw for /customers/me; return guest on 401/non-OK
-export const fetchUserProfile = async (): Promise<User> => {
-  const url = `${API_BASE_URL}/api/v1/customers/me`;
+// --- PROFILE: get current user ---
+export const fetchUserProfile = async (): Promise<User | null> => {
+  const url = `${API_BASE_URL}/customers/me`;
   const deviceId = getDeviceId();
 
   try {
     const response = await fetch(url, {
+      credentials: "include",
       headers: { "X-Device-Id": deviceId },
     });
 
-    if (response.status === 401) return guestUser;
-    if (!response.ok) {
-      console.warn(`fetchUserProfile: non-OK status ${response.status}`);
-      return guestUser;
-    }
+    if (response.status === 401 || response.status === 403) return null;
+    if (!response.ok)
+      throw new Error(`Failed to fetch user profile: ${response.status}`);
 
     const responseData = await response.json();
-    const backendCustomer: BackendCustomer | null =
-      responseData?.data?.customer ?? responseData?.data ?? null;
+    // Handles both { data: { customer: { ... } } } or { data: { ... } }
+    const customer: User | undefined =
+      responseData?.data?.customer ?? responseData?.data ?? undefined;
+    if (!customer || !customer._id) return null;
 
-    if (!backendCustomer || !backendCustomer._id) {
-      return guestUser;
-    }
-
-    // Addresses optional; ignore failures
-    let addresses: BackendAddress[] = [];
-    try {
-      const addressesUrl = `${API_BASE_URL}/api/v1/customers/${backendCustomer._id}/addresses`;
-      const addressesResponse = await fetch(addressesUrl);
-      if (addressesResponse.ok) {
-        const addressesData = await addressesResponse.json();
-        addresses =
-          addressesData.data?.items ||
-          addressesData.data ||
-          addressesData.items ||
-          [];
-      }
-    } catch (err) {
-      console.warn("fetchUserProfile: failed to fetch addresses", err);
-    }
-
-    return transformCustomer(backendCustomer, addresses);
+    // Ensure camelCase naming regardless of backend
+    return {
+      _id: customer._id,
+      fullName: customer.fullName,
+      email: customer.email,
+      mobile: customer.mobile,
+    };
   } catch (err) {
-    console.warn("fetchUserProfile: error", err);
-    return guestUser;
+    // Optionally report error here
+    return null;
   }
 };
 
+// --- ADDRESSES: get the current user's addresses ---
+export const fetchUserAddresses = async (): Promise<Address[]> => {
+  const user = await fetchUserProfile();
+  if (!user?._id) throw new Error("No authenticated user");
+
+  const url = `${API_BASE_URL}/customers/${user._id}/addresses`;
+  const response = await fetch(url, { credentials: "include" });
+
+  if (!response.ok)
+    throw new Error(`Failed to fetch addresses: ${response.status}`);
+  const responseData = await response.json();
+  // Handles { data: { items: [...] } } or { items: [...] }
+  const items: Address[] =
+    responseData?.data?.items ?? responseData?.items ?? [];
+  return items;
+};
+
+// --- LOGIN ---
 export const loginUser = async (
   credentials: LoginCredentials
 ): Promise<{ user: User; token: string }> => {
-  const url = `${API_BASE_URL}/api/v1/customers/login`;
+  const url = `${API_BASE_URL}/customers/login`;
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(credentials),
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -157,28 +110,32 @@ export const loginUser = async (
   }
 
   const user = await fetchUserProfile();
+  if (!user) throw new Error("Login succeeded but user fetch failed");
+  // TODO: backend should return token; here we return mock to satisfy type
   return { user, token: "mock-jwt-token" };
 };
 
-// Authenticated profile update; throws on 401/non-OK so UI can show error
+// --- PROFILE UPDATE ---
 export const updateUserProfile = async (
-  payload: Partial<{ name: string; email: string; phone: string }>
+  payload: Partial<{ fullName: string; email: string; mobile: string }>
 ): Promise<User> => {
-  const url = `${API_BASE_URL}/api/v1/customers/me`;
+  const url = `${API_BASE_URL}/customers/me`;
 
   const response = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
 
-  if (response.status === 401) {
+  if (response.status === 401)
     throw new Error("Please sign in to update your profile");
-  }
-  if (!response.ok) {
+  if (!response.ok)
     throw new Error(`Failed to update profile: ${response.status}`);
-  }
 
-  // Refresh full profile (including addresses)
-  return fetchUserProfile();
+  // Refresh full profile after update
+  const user = await fetchUserProfile();
+  if (!user)
+    throw new Error("Profile updated, but failed to fetch new profile");
+  return user;
 };

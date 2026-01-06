@@ -3,7 +3,7 @@ import CommonButton from "@/app/components/button/CommonButton";
 import CommonHeading from "@/app/components/CommonHeading";
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from "@headlessui/react";
 import { Edit2Icon, Lock, Plus, Pencil, Trash2 } from "lucide-react";
-import AddAddressModal from "./AddAddressModal";
+import AddAddressModal, { type AddAddressPayload } from "./AddAddressModal";
 import { useState } from "react";
 import EditProfileModal from "./EditProfileModal";
 import Link from "next/link";
@@ -12,26 +12,40 @@ import DeleteAddressConfirmModal from "@/app/components/DeleteAddressConfirm";
 import { useUserProfile, useLogout } from "@/hooks/use-auth";
 import { useOrders } from "@/hooks/use-orders";
 import {
+  useAddresses,
   useAddAddress,
   useDeleteAddress,
   useSetDefaultAddress,
   useUpdateAddress,
 } from "@/hooks/use-address";
+import type { Address } from "@/services/address-service";
 
-// Defined Address interface to remove 'any'
-interface Address {
+// UI mapping type for display only
+type DisplayAddress = {
   id: string;
   name: string;
   address: string;
   cityZip: string;
   isDefault: boolean;
+};
+
+function backendToDisplayAddress(backend: Address): DisplayAddress {
+  return {
+    id: backend._id,
+    name: backend.fullName,
+    address: backend.line1 + (backend.line2 ? `, ${backend.line2}` : ""),
+    cityZip: `${backend.city}, ${backend.state} ${backend.pincode}`.replace(
+      /\s+/g,
+      " "
+    ),
+    isDefault: backend.isDefault,
+  };
 }
 
 export default function Account() {
   const [openAddAddress, setOpenAddAddress] = useState(false);
   const [isEditAddress, setIsEditAddress] = useState(false);
-  // Replaced 'any' with Address type
-  const [editingAddress, setEditingAddress] = useState<Address | null>(null);
+  const [editingAddress, setEditingAddress] = useState<Address | null>(null); // full backend type!
   const [openEditProfile, setOpenEditProfile] = useState(false);
   const [openSignOutConfirm, setOpenSignOutConfirm] = useState(false);
   const [openDeleteAddress, setOpenDeleteAddress] = useState(false);
@@ -39,53 +53,52 @@ export default function Account() {
     null
   );
 
+  // Full backend data for profile and addresses
   const { data: userProfile } = useUserProfile();
   const { data: orders = [] } = useOrders();
+  const { data: backendAddresses = [], isLoading: addressLoading } =
+    useAddresses();
   const logout = useLogout();
   const addAddress = useAddAddress();
   const updateAddress = useUpdateAddress();
   const deleteAddress = useDeleteAddress();
   const setDefaultAddress = useSetDefaultAddress();
 
-  const userName = userProfile?.name || "User";
-  const userPhone = userProfile?.phone || "+91 0000000000";
+  // UI mapping ONLY for display
+  const addresses: DisplayAddress[] = backendAddresses.map(
+    backendToDisplayAddress
+  );
+
+  const userName = userProfile?.fullName || "User";
+  const userPhone = userProfile?.mobile || "+91 0000000000";
   const userEmail = userProfile?.email || "user@example.com";
-  const addresses = userProfile?.addresses || [];
 
   const handleSignOut = () => {
     logout.mutate();
     setOpenSignOutConfirm(false);
   };
 
-  const handleAddressSave = (addressData: {
-    country: string;
-    firstName: string;
-    lastName: string;
-    address: string;
-    apartment: string;
-    city: string;
-    state: string;
-    pincode: string;
-  }) => {
-    // Convert form data to Address format
-    const addressPayload = {
-      name: `${addressData.firstName} ${addressData.lastName}`.trim(),
-      address:
-        addressData.address +
-        (addressData.apartment ? `, ${addressData.apartment}` : ""),
-      cityZip: `${addressData.city}, ${addressData.state} ${addressData.pincode}`,
-      isDefault: isEditAddress
-        ? editingAddress?.isDefault ?? false
-        : addresses.length === 0,
+  const handleAddressSave = (backendPayload: AddAddressPayload) => {
+    const label = "Home";
+    // Only set as default if it's the first address, or whatever your business logic is
+    const isDefault =
+      isEditAddress && editingAddress
+        ? editingAddress.isDefault
+        : backendAddresses.length === 0;
+
+    const payloadWithRequired = {
+      ...backendPayload,
+      label,
+      isDefault,
     };
 
     if (isEditAddress && editingAddress) {
       updateAddress.mutate({
-        addressId: editingAddress.id,
-        addressData: addressPayload,
+        addressId: editingAddress._id,
+        addressData: payloadWithRequired,
       });
     } else {
-      addAddress.mutate(addressPayload);
+      addAddress.mutate(payloadWithRequired);
     }
 
     setOpenAddAddress(false);
@@ -105,9 +118,10 @@ export default function Account() {
     setDefaultAddress.mutate(addressId);
   };
 
-  // Replaced 'any' with Address type
-  const handleEditAddress = (address: Address) => {
-    setEditingAddress(address);
+  // Pass backend address for editing, not display mapping
+  const handleEditAddress = (addressId: string) => {
+    const found = backendAddresses.find((a) => a._id === addressId) || null;
+    setEditingAddress(found);
     setIsEditAddress(true);
     setOpenAddAddress(true);
   };
@@ -211,9 +225,12 @@ export default function Account() {
                       <CommonHeading level={2} title="My Addresses" />
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                         <button
-                          onClick={() => setOpenAddAddress(true)}
-                          // Updated to canonical tailwind class min-h-55
-                          className=" border-2 border-dashed border-foreground/20 rounded-xl p-6 flex flex-col items-center justify-center text-foreground hover:bg-primary/5 transition min-h-55"
+                          onClick={() => {
+                            setOpenAddAddress(true);
+                            setIsEditAddress(false);
+                            setEditingAddress(null);
+                          }}
+                          className="border-2 border-dashed border-foreground/20 rounded-xl p-6 flex flex-col items-center justify-center text-foreground hover:bg-primary/5 transition min-h-55"
                         >
                           <Plus size={28} />
                           <span className="mt-2 font-medium tracking-wide">
@@ -221,70 +238,69 @@ export default function Account() {
                           </span>
                         </button>
 
-                        {addresses.map((address) => (
-                          <div
-                            key={address.id}
-                            className="border border-foreground/20 rounded-xl p-5 flex flex-col justify-between"
-                          >
-                            {/* HEADER: NAME + EDIT */}
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="font-medium text-sm leading-tight">
-                                {address.name}
-                              </p>
-
-                              <CommonButton
-                                variant="iconBtn"
-                                onClick={() => handleEditAddress(address)}
-                              >
-                                <Pencil size={14} />
-                              </CommonButton>
-                            </div>
-
-                            {/* ADDRESS DETAILS */}
-                            <div className="mt-2 text-sm text-foreground/80 leading-relaxed space-y-0.5">
-                              {/* Updated to canonical tailwind class wrap-break-word */}
-                              <p className="wrap-break-word">
-                                {address.address}
-                              </p>
-
-                              <p>{address.cityZip}</p>
-
-                              <p>India</p>
-                            </div>
-
-                            {/* ACTIONS */}
-                            <div className="flex items-center justify-between mt-5">
-                              {address.isDefault ? (
-                                <span className="px-4 py-1 text-xs rounded-full bg-brand/80 text-background">
-                                  Default
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() =>
-                                    handleSetDefaultAddress(address.id)
-                                  }
-                                  className="px-4 py-1 text-xs rounded-full border border-brand hover:bg-brand/80 hover:text-background transition"
-                                  disabled={setDefaultAddress.isPending}
+                        {addressLoading ? (
+                          <p>Loading...</p>
+                        ) : addresses.length === 0 ? (
+                          <p className="text-foreground/60 text-sm col-span-2">
+                            No addresses yet
+                          </p>
+                        ) : (
+                          addresses.map((address) => (
+                            <div
+                              key={address.id}
+                              className="border border-foreground/20 rounded-xl p-5 flex flex-col justify-between"
+                            >
+                              {/* HEADER: NAME + EDIT */}
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="font-medium text-sm leading-tight">
+                                  {address.name}
+                                </p>
+                                <CommonButton
+                                  variant="iconBtn"
+                                  onClick={() => handleEditAddress(address.id)}
                                 >
-                                  {setDefaultAddress.isPending
-                                    ? "Setting..."
-                                    : "Set Default"}
-                                </button>
-                              )}
-
-                              <CommonButton
-                                variant="iconBtn"
-                                className="border-red-600 hover:bg-red-600 text-red-600 outline-0 ring-0"
-                                onClick={() => {
-                                  setSelectedAddressId(address.id);
-                                  setOpenDeleteAddress(true);
-                                }}
-                              >
-                                <Trash2 size={16} />
-                              </CommonButton>
+                                  <Pencil size={14} />
+                                </CommonButton>
+                              </div>
+                              {/* ADDRESS DETAILS */}
+                              <div className="mt-2 text-sm text-foreground/80 leading-relaxed space-y-0.5">
+                                <p className="break-all">{address.address}</p>
+                                <p>{address.cityZip}</p>
+                                <p>India</p>
+                              </div>
+                              {/* ACTIONS */}
+                              <div className="flex items-center justify-between mt-5">
+                                {address.isDefault ? (
+                                  <span className="px-4 py-1 text-xs rounded-full bg-brand/80 text-background">
+                                    Default
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() =>
+                                      handleSetDefaultAddress(address.id)
+                                    }
+                                    className="px-4 py-1 text-xs rounded-full border border-brand hover:bg-brand/80 hover:text-background transition"
+                                    disabled={setDefaultAddress.isPending}
+                                  >
+                                    {setDefaultAddress.isPending
+                                      ? "Setting..."
+                                      : "Set Default"}
+                                  </button>
+                                )}
+                                <CommonButton
+                                  variant="iconBtn"
+                                  className="border-red-600 hover:bg-red-600 text-red-600 outline-0 ring-0"
+                                  onClick={() => {
+                                    setSelectedAddressId(address.id);
+                                    setOpenDeleteAddress(true);
+                                  }}
+                                >
+                                  <Trash2 size={16} />
+                                </CommonButton>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     </div>
                   </TabPanel>

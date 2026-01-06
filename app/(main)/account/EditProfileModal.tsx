@@ -1,87 +1,64 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { Fragment, useState, useEffect, useRef } from "react"
-import { Dialog, Transition } from "@headlessui/react"
-import { X } from "lucide-react"
-import CommonInput from "@/app/components/input/CommonInput"
-import CommonButton from "@/app/components/button/CommonButton"
-import { useUpdateProfile, useUserProfile } from "@/hooks/use-auth"
+import type React from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
+import { Dialog, Transition } from "@headlessui/react";
+import { X } from "lucide-react";
+import CommonInput from "@/app/components/input/CommonInput";
+import CommonButton from "@/app/components/button/CommonButton";
+import { useUpdateProfile, useUserProfile } from "@/hooks/use-auth";
 
 type EditProfileModalProps = {
-  open: boolean
-  onClose: () => void
-}
+  open: boolean;
+  onClose: () => void;
+};
 
-export default function EditProfileModal({ open, onClose }: EditProfileModalProps) {
-  const { data: userProfile } = useUserProfile()
-  const updateProfile = useUpdateProfile()
-  
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-  })
-  
-  // Use ref to track if we should sync on next open
-  const shouldSyncRef = useRef(true)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+export default function EditProfileModal({
+  open,
+  onClose,
+}: EditProfileModalProps) {
+  const { data: userProfile } = useUserProfile();
+  const updateProfile = useUpdateProfile();
 
-  // Sync form data when modal opens
+  // Compute the default form data when userProfile changes
+  const defaultFormData = useMemo(() => {
+    if (!userProfile) {
+      return { firstName: "", lastName: "", email: "", mobile: "" };
+    }
+    const nameParts = (userProfile.fullName || "").trim().split(/\s+/);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
+    return {
+      firstName,
+      lastName,
+      email: userProfile.email || "",
+      mobile: userProfile.mobile || "",
+    };
+  }, [userProfile]);
+
+  // Keep form state in sync ONLY when opening, or when userProfile changes
+  const [formData, setFormData] = useState(defaultFormData);
   useEffect(() => {
-    // Clear any existing timeout to prevent race conditions
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
+    if (open) {
+      setFormData(defaultFormData);
     }
-    
-    if (open && userProfile && shouldSyncRef.current) {
-      // Schedule the update for next render cycle to avoid cascading
-      timeoutRef.current = setTimeout(() => {
-        // Split name more robustly
-        const nameParts = (userProfile.name || "").trim().split(/\s+/)
-        const firstName = nameParts[0] || ""
-        const lastName = nameParts.slice(1).join(" ") || ""
-        
-        setFormData({
-          firstName,
-          lastName,
-          email: userProfile.email || "",
-        })
-        timeoutRef.current = null
-      }, 0)
-      shouldSyncRef.current = false
-    }
-    
-    // Reset sync flag when modal closes
-    if (!open) {
-      shouldSyncRef.current = true
-    }
-    
-    // Cleanup function runs when effect dependencies change or component unmounts
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-    }
-  }, [open, userProfile])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultFormData]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     updateProfile.mutate({
-      name: `${formData.firstName} ${formData.lastName}`.trim(),
+      fullName: `${formData.firstName} ${formData.lastName}`.trim(),
       email: formData.email,
-    })
-    // Close modal after submission
-    onClose()
-  }
+      mobile: formData.mobile,
+    });
+    onClose();
+  };
 
   return (
     <Transition appear show={open} as={Fragment}>
@@ -111,18 +88,31 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-xl rounded-2xl bg-background p-6">
+              <Dialog.Panel
+                // The key here will remount form if userProfile or modal intent changes
+                key={`${open}-${userProfile?.fullName ?? ""}-${
+                  userProfile?.email ?? ""
+                }-${userProfile?.mobile ?? ""}`}
+                className="w-full max-w-xl rounded-2xl bg-background p-6"
+              >
                 {/* HEADER */}
                 <div className="flex items-center justify-between mb-6">
-                  <Dialog.Title className="text-lg font-medium">Edit profile</Dialog.Title>
+                  <Dialog.Title className="text-lg font-medium">
+                    Edit profile
+                  </Dialog.Title>
 
-                  <button onClick={onClose} className="p-2 rounded-full hover:bg-foreground/10">
+                  <button
+                    onClick={onClose}
+                    className="p-2 rounded-full hover:bg-foreground/10"
+                    aria-label="Close modal"
+                    title="Close"
+                  >
                     <X size={18} />
                   </button>
                 </div>
 
                 {/* FORM */}
-                <form onSubmit={handleSubmit} className="">
+                <form onSubmit={handleSubmit}>
                   {/* FIRST & LAST NAME */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <CommonInput
@@ -144,15 +134,22 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
                   </div>
 
                   {/* EMAIL */}
-                  <div>
-                    <CommonInput
-                      label="Email"
-                      name="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                    />
-                  </div>
+                  <CommonInput
+                    label="Email"
+                    name="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                  />
+
+                  {/* MOBILE */}
+                  <CommonInput
+                    label="Mobile"
+                    name="mobile"
+                    type="tel"
+                    value={formData.mobile}
+                    onChange={handleInputChange}
+                  />
 
                   {/* FOOTER ACTIONS */}
                   <div className="pt-4 flex items-center justify-end gap-3">
@@ -165,7 +162,11 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
                       Cancel
                     </CommonButton>
 
-                    <CommonButton type="submit" disabled={updateProfile.isPending} className="w-fit max-w-fit px-6">
+                    <CommonButton
+                      type="submit"
+                      disabled={updateProfile.isPending}
+                      className="w-fit max-w-fit px-6"
+                    >
                       {updateProfile.isPending ? "Saving..." : "Save"}
                     </CommonButton>
                   </div>
@@ -176,5 +177,5 @@ export default function EditProfileModal({ open, onClose }: EditProfileModalProp
         </div>
       </Dialog>
     </Transition>
-  )
+  );
 }

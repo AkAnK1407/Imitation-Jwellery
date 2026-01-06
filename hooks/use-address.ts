@@ -4,24 +4,34 @@ import {
   updateAddress,
   deleteAddress,
   setDefaultAddress,
+  fetchAddresses,
+  Address,
 } from "@/services/address-service";
-import type { Address } from "@/services/auth-service";
 
-// add new address
+// Add new address
 export const useAddAddress = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (addressData: Omit<Address, "id">) => addAddress(addressData),
-
-    // update profile data after success
-    onSuccess: (data) => {
-      queryClient.setQueryData(["user", "profile"], data);
+    mutationFn: (
+      addressData: Omit<
+        Address,
+        "_id" | "customerId" | "createdAt" | "updatedAt"
+      >
+    ) => addAddress(addressData),
+    onSuccess: () => {
+      // Invalidate queries to trigger refetch for address list and (if used for user profile)
+      queryClient.invalidateQueries({ queryKey: ["addresses"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+    },
+    onError: (error: unknown) => {
+      // Optionally show error
+      // toast.error(error instanceof Error ? error.message : "Failed to add address");
     },
   });
 };
 
-// update existing address
+// Update existing address
 export const useUpdateAddress = () => {
   const queryClient = useQueryClient();
 
@@ -31,40 +41,58 @@ export const useUpdateAddress = () => {
       addressData,
     }: {
       addressId: string;
-      addressData: Partial<Address>;
+      addressData: Partial<
+        Omit<Address, "_id" | "customerId" | "createdAt" | "updatedAt">
+      >;
     }) => updateAddress(addressId, addressData),
-
-    // refresh profile after update
-    onSuccess: (data) => {
-      queryClient.setQueryData(["user", "profile"], data);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["addresses"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+    },
+    onError: (error: unknown) => {
+      // Optionally show error
     },
   });
 };
 
-// delete address
+// Delete address
 export const useDeleteAddress = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (addressId: string) => deleteAddress(addressId),
-
-    // sync profile after delete
-    onSuccess: (data) => {
-      queryClient.setQueryData(["user", "profile"], data);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["addresses"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+    },
+    onError: (error: unknown) => {
+      // Optionally show error
     },
   });
 };
 
-// mark address as default
+// Mark address as default
 export const useSetDefaultAddress = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (addressId: string) => setDefaultAddress(addressId),
-
-    // update default address in profile
-    onSuccess: (data) => {
-      queryClient.setQueryData(["user", "profile"], data);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["addresses"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
     },
+    onError: (error: unknown) => {
+      // Optionally show error
+    },
+  });
+};
+
+// If needed: List addresses (for query list pattern)
+import { useQuery } from "@tanstack/react-query";
+
+export const useAddresses = () => {
+  return useQuery({
+    queryKey: ["addresses"],
+    queryFn: fetchAddresses,
   });
 };

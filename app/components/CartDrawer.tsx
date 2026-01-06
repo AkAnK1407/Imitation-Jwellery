@@ -22,19 +22,13 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
   const updateQuantity = useUpdateCartQuantity();
   const removeFromCart = useRemoveFromCart();
 
-  const cartItems = cart?.items || [];
-  const cartTotal = cart?.total || 0;
+  const cartItems = cart?.items ?? [];
+  const cartTotal = typeof cart?.total === "number" ? cart.total : 0;
+
   const cartCount = cartItems.reduce(
     (sum, item) => sum + (item.quantity ?? 1),
     0
   );
-
-  console.log("Checking CartDrawer rendered with:", {
-    itemCount: cartItems.length,
-    cartCount,
-    cartTotal,
-    isLoading,
-  });
 
   return (
     <Transition appear show={open} as={Fragment}>
@@ -65,7 +59,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
               leaveTo="translate-x-full"
             >
               <Dialog.Panel className="w-full max-w-5xl bg-background shadow-xl flex">
-                {/* LEFT: YOU MAY ALSO LIKE */}
+                {/* LEFT */}
                 <div className="hidden md:block w-1/2 border-r border-foreground/20 p-6 overflow-y-auto">
                   <h3 className="font-times text-lg mb-5">YOU MAY ALSO LIKE</h3>
 
@@ -88,8 +82,8 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                   </div>
                 </div>
 
-                {/* RIGHT: CART */}
-                <div className="w-full md:w-1/2  p-4 md:p-6 flex flex-col">
+                {/* RIGHT */}
+                <div className="w-full md:w-1/2 p-4 md:p-6 flex flex-col">
                   {/* HEADER */}
                   <div className="flex items-center justify-between mb-5">
                     <h3 className="text-lg font-medium">
@@ -100,32 +94,31 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                     </button>
                   </div>
 
-                  {/* CART ITEMS */}
+                  {/* ITEMS */}
                   <div className="flex-1 overflow-y-auto space-y-6">
                     {isLoading ? (
-                      <p className="text-sm text-foreground/60 text-center py-8">
+                      <p className="text-sm text-center py-8">
                         Loading cart...
                       </p>
                     ) : cartItems.length > 0 ? (
                       cartItems.map((item) => (
                         <CartItem
                           key={item.id}
-                          id={item.id}
                           title={item.name}
                           price={item.price}
                           image={item.image}
                           quantity={item.quantity}
-                          onUpdateQuantity={(newQuantity) =>
+                          onUpdateQuantity={(qty) =>
                             updateQuantity.mutate({
                               cartItemId: item.id,
-                              quantity: newQuantity,
+                              quantity: qty,
                             })
                           }
                           onRemove={() => removeFromCart.mutate(item.id)}
                         />
                       ))
                     ) : (
-                      <p className="text-sm text-foreground/60 text-center py-8">
+                      <p className="text-sm text-center py-8">
                         Your cart is empty
                       </p>
                     )}
@@ -140,7 +133,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
                       </span>
                     </div>
 
-                    <p className="text-xs text-foreground/60 mb-4">
+                    <p className="text-xs mb-4">
                       Taxes and shipping calculated at checkout
                     </p>
 
@@ -153,7 +146,7 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
 
                     <Link
                       href="/cart"
-                      className="mt-4 commonLink flex justify-center mx-auto"
+                      className="mt-4 commonLink flex justify-center"
                     >
                       VIEW CART
                     </Link>
@@ -167,6 +160,10 @@ export default function CartDrawer({ open, onClose }: CartDrawerProps) {
     </Transition>
   );
 }
+
+/* -------------------- */
+/* Helper components    */
+/* -------------------- */
 
 function SuggestedProduct({
   title,
@@ -190,7 +187,7 @@ function SuggestedProduct({
 
       <div>
         <p className="text-sm font-medium">{title}</p>
-        <p className="text-sm text-foreground/70">{price}</p>
+        <p className="text-sm">{price}</p>
         <Link href="#" className="mt-1 commonLink">
           + Add to Cart
         </Link>
@@ -200,7 +197,6 @@ function SuggestedProduct({
 }
 
 function CartItem({
-  id,
   title,
   price,
   image,
@@ -208,14 +204,16 @@ function CartItem({
   onUpdateQuantity,
   onRemove,
 }: {
-  id: string;
   title: string;
-  price: number;
+  price: number | null | undefined;
   image: string;
   quantity: number;
   onUpdateQuantity: (quantity: number) => void;
   onRemove: () => void;
 }) {
+  const safePrice = typeof price === "number" ? price : 0;
+  const safeQty = typeof quantity === "number" ? quantity : 1;
+
   return (
     <div className="flex gap-4">
       <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-foreground/10">
@@ -229,22 +227,22 @@ function CartItem({
 
       <div className="flex-1">
         <p className="text-sm font-medium">{title}</p>
-        <p className="text-sm text-foreground/70">
-          ₹{price.toFixed(2)} x {quantity}
+        <p className="text-sm">
+          ₹{safePrice.toFixed(2)} × {safeQty}
         </p>
 
         <div className="flex items-center gap-3 mt-2">
-          <div className="flex items-center border border-foreground/20 rounded-full overflow-hidden">
+          <div className="flex items-center border rounded-full overflow-hidden">
             <button
-              onClick={() => onUpdateQuantity(Math.max(1, quantity - 1))}
-              className="px-4 py-2 text-foreground"
+              onClick={() => onUpdateQuantity(Math.max(1, safeQty - 1))}
+              className="px-4 py-2"
             >
               -
             </button>
-            <span className="px-4 text-foreground">{quantity}</span>
+            <span className="px-4">{safeQty}</span>
             <button
-              onClick={() => onUpdateQuantity(quantity + 1)}
-              className="px-4 py-2 text-foreground"
+              onClick={() => onUpdateQuantity(safeQty + 1)}
+              className="px-4 py-2"
             >
               +
             </button>

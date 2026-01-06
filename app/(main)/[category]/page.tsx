@@ -23,8 +23,6 @@ import { Check, ChevronDown, Filter } from "lucide-react";
 
 import { useProductsByCategory } from "@/hooks/use-products";
 import { getCategoryBySlug } from "@/services/category-service";
-import type { ProductListResponse } from "@/services/product-service";
-
 
 const sortOptions = [
   { label: "Featured", value: "featured" },
@@ -39,12 +37,10 @@ const sortOptions = [
 
 const MAX_PRODUCT_PRICE = 2500;
 
-
-
 export default function CategoryProductList() {
   const { category: categorySlug } = useParams<{ category: string }>();
 
-
+  /* ---------- category ---------- */
 
   const { data: category, isLoading: isCategoryLoading } = useQuery({
     queryKey: ["category", categorySlug],
@@ -53,38 +49,34 @@ export default function CategoryProductList() {
     staleTime: 1000 * 60 * 10,
   });
 
-  // If category slug does not exist in backend → 404
   useEffect(() => {
-    if (!isCategoryLoading && !category) {
-      notFound();
-    }
+    if (!isCategoryLoading && !category) notFound();
   }, [isCategoryLoading, category]);
 
-
+  /* ---------- local state ---------- */
 
   const [openCart, setOpenCart] = useState(false);
   const [selected, setSelected] = useState(sortOptions[0]);
-
   const [inStock, setInStock] = useState(false);
   const [outOfStock, setOutOfStock] = useState(false);
-
   const [price, setPrice] = useState<[number, number]>([0, MAX_PRODUCT_PRICE]);
-  const [debouncedPrice, setDebouncedPrice] = useState<[number, number]>(price);
-
+  const [debouncedPrice, setDebouncedPrice] = useState(price);
   const [openMobileFilter, setOpenMobileFilter] = useState(false);
-
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedPrice(price), 250);
     return () => clearTimeout(t);
   }, [price]);
 
+  /* ---------- availability ---------- */
 
-  const availabilityParam: boolean | undefined = useMemo(() => {
+  const availabilityParam = useMemo<boolean | undefined>(() => {
     if (inStock && !outOfStock) return true;
     if (!inStock && outOfStock) return false;
     return undefined;
   }, [inStock, outOfStock]);
+
+  /* ---------- server filters ---------- */
 
   const serverFilters = useMemo(
     () => ({
@@ -94,6 +86,7 @@ export default function CategoryProductList() {
     [debouncedPrice]
   );
 
+  /* ---------- products ---------- */
 
   const {
     data,
@@ -105,56 +98,61 @@ export default function CategoryProductList() {
     isFetchingNextPage,
   } = useProductsByCategory(categorySlug, serverFilters);
 
-  const pages = (data?.pages ?? []) as ProductListResponse[];
+  const pages = data?.pages ?? [];
 
-  const sourceProducts = useMemo(() => pages.flatMap((p) => p.data), [pages]);
+  const allProducts = useMemo(() => pages.flatMap((p) => p.data), [pages]);
 
   const totalFromBackend = pages[0]?.meta?.totalItems ?? 0;
 
+  /* ---------- availability filter ---------- */
 
   const availabilityFiltered = useMemo(() => {
-    if (availabilityParam === undefined) return sourceProducts;
-    return sourceProducts.filter((p) =>
+    if (availabilityParam === undefined) return allProducts;
+    return allProducts.filter((p) =>
       availabilityParam ? p.stockQty > 0 : p.stockQty === 0
     );
-  }, [sourceProducts, availabilityParam]);
+  }, [allProducts, availabilityParam]);
+
+  /* ---------- sorting ---------- */
 
   const sortedProducts = useMemo(() => {
     const arr = [...availabilityFiltered];
 
-    const by = (
-      cmp: (a: (typeof arr)[number], b: (typeof arr)[number]) => number
-    ) => arr.sort(cmp);
-
     switch (selected.value) {
       case "az":
-        return by((a, b) => a.title.localeCompare(b.title));
+        return arr.sort((a, b) => a.title.localeCompare(b.title));
       case "za":
-        return by((a, b) => b.title.localeCompare(a.title));
+        return arr.sort((a, b) => b.title.localeCompare(a.title));
       case "price-asc":
-        return by((a, b) => a.priceNumber - b.priceNumber);
+        return arr.sort((a, b) => a.priceNumber - b.priceNumber);
       case "price-desc":
-        return by((a, b) => b.priceNumber - a.priceNumber);
+        return arr.sort((a, b) => b.priceNumber - a.priceNumber);
       case "date-asc":
-        return by((a, b) => a.createdAtMs - b.createdAtMs);
+        return arr.sort((a, b) => a.createdAtMs - b.createdAtMs);
       case "date-desc":
-        return by((a, b) => b.createdAtMs - a.createdAtMs);
+        return arr.sort((a, b) => b.createdAtMs - a.createdAtMs);
       case "best-selling":
-        return by((a, b) => {
-          if (a.isBestSeller !== b.isBestSeller) return a.isBestSeller ? -1 : 1;
-          return b.createdAtMs - a.createdAtMs;
-        });
+        return arr.sort((a, b) =>
+          a.isBestSeller === b.isBestSeller
+            ? b.createdAtMs - a.createdAtMs
+            : a.isBestSeller
+            ? -1
+            : 1
+        );
       default:
-        return by((a, b) => {
-          if (a.isNewArrival !== b.isNewArrival) return a.isNewArrival ? -1 : 1;
-          if (a.isBestSeller !== b.isBestSeller) return a.isBestSeller ? -1 : 1;
-          return b.createdAtMs - a.createdAtMs;
-        });
+        return arr.sort((a, b) =>
+          a.isNewArrival === b.isNewArrival
+            ? b.createdAtMs - a.createdAtMs
+            : a.isNewArrival
+            ? -1
+            : 1
+        );
     }
   }, [availabilityFiltered, selected.value]);
 
   const selectedAvailabilityCount = (inStock ? 1 : 0) + (outOfStock ? 1 : 0);
 
+  /* ---------- UI ---------- */
 
   return (
     <>
@@ -238,25 +236,6 @@ export default function CategoryProductList() {
             </div>
           </div>
 
-          {/* Mobile filter bar */}
-          <div className="flex md:hidden justify-between mb-6">
-            <button
-              onClick={() => setOpenMobileFilter(true)}
-              className="flex gap-2 px-4 py-2 border rounded-lg text-sm"
-            >
-              <Filter className="w-5 h-5" />
-              Filter
-            </button>
-
-            <CommonSelect
-              name="sort"
-              options={sortOptions}
-              value={selected}
-              onChange={setSelected}
-              className="w-40"
-            />
-          </div>
-
           {/* Product grid */}
           <div className="productGrid">
             {isLoading ? (
@@ -305,25 +284,6 @@ export default function CategoryProductList() {
       </div>
 
       <CartDrawer open={openCart} onClose={() => setOpenCart(false)} />
-
-      {/* Mobile filter dialog */}
-      <Dialog
-        open={openMobileFilter}
-        onClose={() => setOpenMobileFilter(false)}
-        className="relative z-50 md:hidden"
-      >
-        <div className="fixed inset-0 bg-black/40" />
-        <div className="fixed inset-x-0 bottom-0">
-          <DialogPanel className="bg-background rounded-t-2xl p-6">
-            <RangeSlider
-              min={0}
-              max={MAX_PRODUCT_PRICE}
-              value={price}
-              onChange={setPrice}
-            />
-          </DialogPanel>
-        </div>
-      </Dialog>
     </>
   );
 }

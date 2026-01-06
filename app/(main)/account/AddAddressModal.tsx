@@ -6,30 +6,24 @@ import { Dialog, Transition } from "@headlessui/react";
 import { X } from "lucide-react";
 import CommonInput from "@/app/components/input/CommonInput";
 import CommonButton from "@/app/components/button/CommonButton";
+import type { Address } from "@/services/address-service";
 
-interface AddressData {
-  id?: string;
-  name: string;
-  address: string;
-  cityZip: string;
-  isDefault?: boolean;
-}
+export type AddAddressPayload = {
+  fullName: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
+};
 
 type AddAddressModalProps = {
   open: boolean;
   onClose: () => void;
   isEdit?: boolean;
-  initialData?: AddressData | null;
-  onSave?: (address: {
-    country: string;
-    firstName: string;
-    lastName: string;
-    address: string;
-    apartment: string;
-    city: string;
-    state: string;
-    pincode: string;
-  }) => void;
+  initialData?: Address | null;
+  onSave?: (payload: AddAddressPayload) => void;
 };
 
 export default function AddAddressModal({
@@ -39,66 +33,50 @@ export default function AddAddressModal({
   initialData,
   onSave,
 }: AddAddressModalProps) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<AddAddressPayload>({
     country: "India",
-    firstName: "",
-    lastName: "",
-    address: "",
-    apartment: "",
+    fullName: "",
+    line1: "",
+    line2: "",
     city: "",
     state: "",
     pincode: "",
   });
 
-  const [prevOpen, setPrevOpen] = useState(false);
-
+  // Only reinitialize the form when modal is opened
   useEffect(() => {
-    if (open && !prevOpen) {
-      setPrevOpen(true);
-      if (isEdit && initialData) {
-        const nameParts = (initialData.name || "").trim().split(/\s+/);
-        const firstName = nameParts[0] || "";
-        const lastName = nameParts.slice(1).join(" ") || "";
+    if (!open) return;
 
-        const addressParts = (initialData.address || "")
-          .split(",")
-          .map((s: string) => s.trim());
-        const cityZipParts = (initialData.cityZip || "")
-          .split(",")
-          .map((s: string) => s.trim());
-
-        setFormData({
-          country: "India",
-          firstName,
-          lastName,
-          address: addressParts[0] || "",
-          apartment: addressParts[1] || "",
-          city: cityZipParts[0] || "",
-          state: cityZipParts[1] || "",
-          pincode: cityZipParts[2] || "",
-        });
-      } else {
-        setFormData({
-          country: "India",
-          firstName: "",
-          lastName: "",
-          address: "",
-          apartment: "",
-          city: "",
-          state: "",
-          pincode: "",
-        });
-      }
+    if (isEdit && initialData) {
+      setFormData({
+        country: initialData.country || "India",
+        fullName: initialData.fullName || "",
+        line1: initialData.line1 || "",
+        line2: initialData.line2 || "",
+        city: initialData.city || "",
+        state: initialData.state || "",
+        pincode: initialData.pincode || "",
+      });
+    } else {
+      setFormData({
+        country: "India",
+        fullName: "",
+        line1: "",
+        line2: "",
+        city: "",
+        state: "",
+        pincode: "",
+      });
     }
-
-    if (!open && prevOpen) {
-      setPrevOpen(false);
-    }
-  }, [open, isEdit, initialData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -106,17 +84,6 @@ export default function AddAddressModal({
     if (onSave) {
       onSave(formData);
     }
-    // Reset form and close
-    setFormData({
-      country: "India",
-      firstName: "",
-      lastName: "",
-      address: "",
-      apartment: "",
-      city: "",
-      state: "",
-      pincode: "",
-    });
     onClose();
   };
 
@@ -157,6 +124,7 @@ export default function AddAddressModal({
                   <button
                     onClick={onClose}
                     aria-label="Close"
+                    title="Close"
                     className="p-2 rounded-full hover:bg-foreground/10"
                   >
                     <X size={18} />
@@ -164,8 +132,7 @@ export default function AddAddressModal({
                 </div>
 
                 {/* FORM */}
-                <form onSubmit={handleSubmit} className="">
-                  {/* Country */}
+                <form onSubmit={handleSubmit}>
                   <CommonInput
                     label="Country/region"
                     name="country"
@@ -173,47 +140,29 @@ export default function AddAddressModal({
                     onChange={handleInputChange}
                     required
                   />
-
-                  {/* First & Last Name */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <CommonInput
-                      label="First name"
-                      name="firstName"
-                      placeholder="First name"
-                      value={formData.firstName}
-                      onChange={handleInputChange}
-                      required
-                    />
-                    <CommonInput
-                      label="Last name"
-                      name="lastName"
-                      placeholder="Last name"
-                      value={formData.lastName}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-
-                  {/* Address */}
                   <CommonInput
-                    label="Address"
-                    name="address"
-                    placeholder="Street, area, landmark"
-                    value={formData.address}
+                    label="Full name"
+                    name="fullName"
+                    placeholder="Full name"
+                    value={formData.fullName}
                     onChange={handleInputChange}
                     required
                   />
-
-                  {/* Apartment */}
                   <CommonInput
-                    label="Apartment, suite, etc (optional)"
-                    name="apartment"
+                    label="Address line 1"
+                    name="line1"
+                    placeholder="Street, area, landmark"
+                    value={formData.line1}
+                    onChange={handleInputChange}
+                    required
+                  />
+                  <CommonInput
+                    label="Address line 2 (optional)"
+                    name="line2"
                     placeholder="Apartment, suite, etc"
-                    value={formData.apartment}
+                    value={formData.line2}
                     onChange={handleInputChange}
                   />
-
-                  {/* City, State, PIN */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <CommonInput
                       label="City"
@@ -242,32 +191,18 @@ export default function AddAddressModal({
                     />
                   </div>
 
-                  {/* FOOTER ACTIONS */}
-                  <div className="pt-4 flex items-center justify-between">
-                    {isEdit ? (
-                      <button
-                        type="button"
-                        className="text-sm text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
-                    ) : (
-                      <span />
-                    )}
-
-                    <div className="flex gap-3">
-                      <CommonButton
-                        type="button"
-                        variant="secondaryBtn"
-                        onClick={onClose}
-                        className="w-fit px-6"
-                      >
-                        Cancel
-                      </CommonButton>
-                      <CommonButton type="submit" className="w-fit px-6">
-                        Save
-                      </CommonButton>
-                    </div>
+                  <div className="pt-4 flex justify-end gap-3">
+                    <CommonButton
+                      type="button"
+                      variant="secondaryBtn"
+                      onClick={onClose}
+                      className="w-fit px-6"
+                    >
+                      Cancel
+                    </CommonButton>
+                    <CommonButton type="submit" className="w-fit px-6">
+                      Save
+                    </CommonButton>
                   </div>
                 </form>
               </Dialog.Panel>

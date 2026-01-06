@@ -8,8 +8,9 @@ import {
 } from "@/services/auth-service";
 import { useRouter } from "next/navigation";
 
-export const useAuth = () => {
-  return useQuery<User>({
+// Fetch current user profile (null if guest)
+export const useUserProfile = () => {
+  return useQuery<User | null>({
     queryKey: ["auth", "me"],
     queryFn: fetchUserProfile,
     staleTime: 1000 * 60 * 5,
@@ -18,30 +19,24 @@ export const useAuth = () => {
   });
 };
 
-export { useAuth as useUserProfile };
+// Helper: Is the user authenticated (not guest/anonymous)
+export const isAuthenticated = (user?: User | null): boolean =>
+  !!user && !!user._id && user._id !== "guest";
 
-export const isAuthenticated = (user?: User): boolean =>
-  !!user && user.id !== "guest";
-
+// Log out/reset auth
 export const useLogout = () => {
   const queryClient = useQueryClient();
   const router = useRouter();
 
   return useMutation({
     mutationFn: async () => {
-      try {
+      if (typeof window !== "undefined") {
         localStorage.removeItem("authToken");
-      } catch {}
-      return true;
+      }
+      return null;
     },
     onSuccess: () => {
-      queryClient.setQueryData<User>(["auth", "me"], {
-        id: "guest",
-        name: "",
-        email: "",
-        phone: "",
-        addresses: [],
-      });
+      queryClient.setQueryData<User | null>(["auth", "me"], null);
       queryClient.invalidateQueries({ queryKey: ["wishlist"] });
       queryClient.invalidateQueries({ queryKey: ["cart"] });
       queryClient.invalidateQueries({ queryKey: ["orders", "list"] });
@@ -50,17 +45,17 @@ export const useLogout = () => {
   });
 };
 
+// Profile update
 export const useUpdateProfile = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    // Accepts only backend-valid fields
     mutationFn: async (
-      payload: Partial<{ name: string; email: string; phone: string }>
-    ) => {
-      return updateUserProfile(payload);
-    },
+      payload: Partial<{ fullName: string; email: string; mobile: string }>
+    ) => updateUserProfile(payload),
     onSuccess: (user) => {
-      queryClient.setQueryData<User>(["auth", "me"], user);
+      queryClient.setQueryData<User | null>(["auth", "me"], user);
     },
   });
 };

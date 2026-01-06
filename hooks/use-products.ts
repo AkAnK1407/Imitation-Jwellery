@@ -21,12 +21,15 @@ export const useProductsInfinite = (
   return useInfiniteQuery<ProductListResponse, Error>({
     queryKey: ["products", "infinite", filters],
 
-    queryFn: ({ pageParam }) =>
-      fetchProducts({
+    queryFn: ({ pageParam }) => {
+      const page = pageParam as number;
+
+      return fetchProducts({
         ...filters,
-        page: pageParam as number,
+        page,
         limit: 20,
-      }),
+      });
+    },
 
     initialPageParam: 1,
 
@@ -40,11 +43,25 @@ export const useProductsInfinite = (
   });
 };
 
-const useCategoryId = (slug: string) => {
-  return useQuery<string | null>({
-    queryKey: ["category-id", slug],
-    queryFn: () => getCategoryIdBySlug(slug),
-    enabled: Boolean(slug),
+const JEWELRY_SET_SLUGS = ["pendant", "earring", "bracelet", "necklace"];
+
+const useResolvedCategoryIds = (categorySlug: string) => {
+  return useQuery<string[]>({
+    queryKey: ["category-ids", categorySlug],
+
+    queryFn: async () => {
+      if (categorySlug === "jewelry-set") {
+        const ids = await Promise.all(
+          JEWELRY_SET_SLUGS.map((slug) => getCategoryIdBySlug(slug))
+        );
+        return ids.filter(Boolean) as string[];
+      }
+
+      const id = await getCategoryIdBySlug(categorySlug);
+      return id ? [id] : [];
+    },
+
+    enabled: Boolean(categorySlug),
     staleTime: 1000 * 60 * 10,
     retry: false,
   });
@@ -52,39 +69,21 @@ const useCategoryId = (slug: string) => {
 
 export const useProductsByCategory = (
   categorySlug: string,
-  filters: Omit<ProductFilters, "categoryId" | "page" | "limit"> = {}
+  filters: Pick<ProductFilters, "minPrice" | "maxPrice"> = {}
 ) => {
-  const { data: categoryId, isLoading } = useCategoryId(categorySlug);
-
-  // check if jewelry set page
-  const isJewelrySet = categorySlug === "jewelry-set";
-
-  // categories inside jewelry set
-  const jewelrySetSlugs = ["pendant", "earring", "bracelet", "necklace"];
+  const { data: categoryIds, isLoading } = useResolvedCategoryIds(categorySlug);
 
   return useInfiniteQuery<ProductListResponse, Error>({
     queryKey: ["products", "category", categorySlug, filters],
 
-    queryFn: async ({ pageParam }) => {
-      // for jewelry set fetch multiple categories
-      if (isJewelrySet) {
-        const ids = await Promise.all(
-          jewelrySetSlugs.map((slug) => getCategoryIdBySlug(slug))
-        );
+    queryFn: ({ pageParam }) => {
+      const page = pageParam as number;
 
-        return fetchProducts({
-          ...filters,
-          categoryId: ids.filter(Boolean) as string[],
-          page: pageParam as number,
-          limit: 20,
-        });
-      }
-
-      // normal single category flow
       return fetchProducts({
-        ...filters,
-        categoryId: categoryId!,
-        page: pageParam as number,
+        categoryId: categoryIds!,
+        minPrice: filters.minPrice,
+        maxPrice: filters.maxPrice,
+        page,
         limit: 20,
       });
     },
@@ -96,7 +95,7 @@ export const useProductsByCategory = (
         ? lastPage.meta.currentPage + 1
         : undefined,
 
-    enabled: (isJewelrySet || Boolean(categoryId)) && !isLoading,
+    enabled: Boolean(categoryIds?.length) && !isLoading,
 
     staleTime: 1000 * 60 * 5,
     retry: 2,
